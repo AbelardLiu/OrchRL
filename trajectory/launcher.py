@@ -41,6 +41,15 @@ class MASLauncher:
             # Remove model from top-level to prevent agent inheritance conflicts
             llm_cfg.pop("model", None)
 
+        # Set search retrieval service URL from environment
+        # This ensures the URL is properly set even if the template uses ${ENV_VAR} syntax
+        search_cfg = config.setdefault("search", {})
+        if isinstance(search_cfg, dict):
+            retrieval_url = os.environ.get("SEARCH_MAS_RETRIEVAL_SERVICE_URL")
+            if retrieval_url:
+                search_cfg["retrieval_service_url"] = retrieval_url
+                _LOGGER.info(f"[MAS Launcher] Set retrieval_service_url from env: {retrieval_url}")
+
         agents_cfg = config.setdefault("agents", {})
         if not isinstance(agents_cfg, dict):
             agents_cfg = {}
