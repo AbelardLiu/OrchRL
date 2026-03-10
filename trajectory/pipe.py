@@ -154,19 +154,41 @@ class AgentPipe:
                 _LOGGER.warning(f"[AgentPipe] Error stopping monitor: {exc}")
                 stop_error = exc
 
-            # Archive config file before cleanup (for both success and failure cases)
+            # Archive config file and process logs before cleanup (for both success and failure cases)
             # Note: failures already archived in the except block, so check if we need to archive
-            if self._archiver is not None and config_path is not None and config_path.exists():
+            if self._archiver is not None:
                 if primary_error is None:  # Success case - archive wasn't called yet
+                    # Archive config file
+                    if config_path is not None and config_path.exists():
+                        try:
+                            self._archiver.copy_file_to_archive(
+                                episode_id=episode_id,
+                                source_path=config_path,
+                                dest_name="mas_config.yaml",
+                            )
+                            _LOGGER.debug(f"[AgentPipe] Archived config for successful episode {episode_id}")
+                        except Exception as e:
+                            _LOGGER.warning(f"[AgentPipe] Failed to archive config file: {e}")
+
+                    # Archive process output (stdout/stderr)
                     try:
-                        self._archiver.copy_file_to_archive(
+                        stdout, stderr = launcher.get_captured_output()
+                        metadata = {
+                            "prompt": prompt,
+                            "command": command,
+                            "exit_code": exit_code,
+                            "config_path": str(config_path) if config_path else None,
+                        }
+                        self._archiver.archive_process_output(
                             episode_id=episode_id,
-                            source_path=config_path,
-                            dest_name="mas_config.yaml",
+                            stdout=stdout,
+                            stderr=stderr,
+                            exit_code=exit_code,
+                            metadata=metadata,
                         )
-                        _LOGGER.debug(f"[AgentPipe] Archived config for successful episode {episode_id}")
+                        _LOGGER.debug(f"[AgentPipe] Archived process logs for successful episode {episode_id}")
                     except Exception as e:
-                        _LOGGER.warning(f"[AgentPipe] Failed to archive config file: {e}")
+                        _LOGGER.warning(f"[AgentPipe] Failed to archive process logs: {e}")
 
             try:
                 launcher.cleanup()
