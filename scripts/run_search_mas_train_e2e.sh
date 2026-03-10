@@ -76,6 +76,13 @@ export NCCL_NET_GDR_LEVEL=0
 # 导出日志归档根目录环境变量，Python 代码可以通过 os.getenv 读取
 export MAS_ARCHIVE_ROOT="$ARCHIVE_ROOT"
 
+# Export Search MAS runtime environment variables
+# These are required by search_mas application during rollout
+export SEARCH_MAS_LLM_BASE_URL="${SEARCH_MAS_LLM_BASE_URL:-http://127.0.0.1:8000/v1}"
+export SEARCH_MAS_LLM_API_KEY="${SEARCH_MAS_LLM_API_KEY:-empty}"
+export SEARCH_MAS_LLM_MODEL="${SEARCH_MAS_LLM_MODEL:-/data1/lll/models/Qwen3-4B-Instruct-2507}"
+export SEARCH_MAS_RETRIEVAL_SERVICE_URL="${SEARCH_MAS_RETRIEVAL_SERVICE_URL:-http://127.0.0.1:8010/retrieve}"
+
 cd "$REPO_ROOT"
 
 echo "[INFO] Repo root: $REPO_ROOT"

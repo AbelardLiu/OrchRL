@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import shlex
 import uuid
 from dataclasses import dataclass
@@ -91,7 +92,17 @@ class AgentPipe:
             )
             _LOGGER.info(f"[AgentPipe] MAS command: {command}")
 
-            process = await asyncio.to_thread(launcher.launch, command=command)
+            # Pass SEARCH_MAS environment variables to subprocess
+            # These may not be available in Ray worker environments
+            mas_env_vars = {}
+            for key in os.environ:
+                if key.startswith('SEARCH_MAS_') or key.startswith('OPENAI_'):
+                    mas_env_vars[key] = os.environ[key]
+
+            if mas_env_vars:
+                _LOGGER.debug(f"[AgentPipe] Passing {len(mas_env_vars)} MAS env vars to subprocess")
+
+            process = await asyncio.to_thread(launcher.launch, command=command, env_vars=mas_env_vars if mas_env_vars else None)
             _LOGGER.info(f"[AgentPipe] MAS process started (PID: {process.pid}), waiting (timeout: {self._config.timeout}s)")
 
             exit_code = await asyncio.to_thread(
@@ -142,6 +153,20 @@ class AgentPipe:
             except Exception as exc:
                 _LOGGER.warning(f"[AgentPipe] Error stopping monitor: {exc}")
                 stop_error = exc
+
+            # Archive config file before cleanup (for both success and failure cases)
+            # Note: failures already archived in the except block, so check if we need to archive
+            if self._archiver is not None and config_path is not None and config_path.exists():
+                if primary_error is None:  # Success case - archive wasn't called yet
+                    try:
+                        self._archiver.copy_file_to_archive(
+                            episode_id=episode_id,
+                            source_path=config_path,
+                            dest_name="mas_config.yaml",
+                        )
+                        _LOGGER.debug(f"[AgentPipe] Archived config for successful episode {episode_id}")
+                    except Exception as e:
+                        _LOGGER.warning(f"[AgentPipe] Failed to archive config file: {e}")
 
             try:
                 launcher.cleanup()
