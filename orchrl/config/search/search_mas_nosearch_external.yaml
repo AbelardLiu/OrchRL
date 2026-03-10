@@ -107,7 +107,7 @@ training:
     credit_assignment: all_turns
     mas_work_dir: examples/mas_app/search
     mas_command_template: python scripts/run_search_mas.py --config {config_path} --question {prompt}
-    config_template_path: /data1/zzh/MATE-main/artifacts/search_mas_real_nosearch.yaml
+    config_template_path: examples/mas_app/search/configs/search_mas_real_nosearch.yaml
     prompt_loader:
       source_type: parquet
       path: /data1/zzh/mas_app/search/data/drmas_search_mas/test_sampled.parquet
