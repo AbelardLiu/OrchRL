@@ -107,14 +107,16 @@ training:
     credit_assignment: all_turns
     mas_work_dir: examples/mas_app/search
     mas_command_template: python scripts/run_search_mas.py --config {config_path} --question {prompt}
-    config_template_path: /data1/zzh/MATE-main/artifacts/search_mas_real_nosearch.yaml
+    config_template_path: /data1/lll/workspace/multi_agent_rl/OrchRL/examples/mas_app/search/configs/search_mas_example.yaml
     prompt_loader:
       source_type: parquet
-      path: /data1/zzh/mas_app/search/data/drmas_search_mas/test_sampled.parquet
+      path: /data1/lll/workspace/multi_agent_rl/DrMAS/mas_app/search/data/drmas_search_mas/test_sampled.parquet
       prompt_keys: [question, prompt, query, problem, input]
       expected_keys: [expected_answer, answer, expected_answers, gold_answer, golden_answers, target, label]
     reward:
       provider: orchrl.reward.search.external_mas_reward:compute_reward
+    archive_logs: true
+    archive_root: null
 models:
   model_0:
     path: ${base_models.policy_0.path}

@@ -277,8 +277,13 @@ class MultiAgentsPPOTrainer:
             model_name for model_name in expected_policy_names if model_name not in gen_batch_output_per_policy
         ]
         if missing_policy_names:
-            raise RuntimeError(
-                f"MATE rollout missing policy batches for {missing_policy_names}; available policies: {actual_policy_names}"
+            # In MAS systems, some agents may not be invoked in all episodes (e.g., searcher might be skipped)
+            # Log a warning instead of raising an error to allow training to continue
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(
+                f"MATE rollout missing policy batches for {missing_policy_names}; available policies: {actual_policy_names}. "
+                f"This is expected in MAS systems where some agents are conditionally invoked."
             )
 
     def fit_one_collect_phase_for_test(self):
@@ -641,6 +646,13 @@ class MultiAgentsPPOTrainer:
                     self._require_expected_mate_policy_batches(gen_batch_output_per_policy)
 
                     for model_name, trainer in self.ppo_trainer_dict.items():
+                        # Skip models that don't have data in this batch (e.g., agent not invoked)
+                        if model_name not in gen_batch_output_per_policy:
+                            import logging
+                            logger = logging.getLogger(__name__)
+                            logger.debug(f"Skipping {model_name} for step {self.global_steps} - no policy batches available")
+                            continue
+
                         dp_world_size = trainer.actor_rollout_wg.world_size
                         batch_per_trainer_temp = self._pad_dataproto_to_world_size(
                             gen_batch_output_per_policy[model_name], dp_world_size
@@ -649,7 +661,7 @@ class MultiAgentsPPOTrainer:
                             batch_per_trainer[model_name] = batch_per_trainer_temp
                         else:
                             batch_per_trainer[model_name] = DataProto.concat([
-                                    batch_per_trainer[model_name], 
+                                    batch_per_trainer[model_name],
                                     batch_per_trainer_temp
                                 ])
                 

@@ -9,13 +9,17 @@ DEFAULT_CONFIG_NAME="search_mas_nosearch_external_5step_4x4_conservative"
 DEFAULT_CUDA_VISIBLE_DEVICES="3,4,5"
 TIMESTAMP="$(date +%Y%m%d_%H%M%S)"
 DEFAULT_LOG_PATH="$REPO_ROOT/logs/search_mas_train_e2e_${TIMESTAMP}.log"
+# 默认日志归档目录：在 logs 目录下创建 archives 子目录
+DEFAULT_ARCHIVE_ROOT="$REPO_ROOT/logs/archives"
 
 export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-$DEFAULT_CUDA_VISIBLE_DEVICES}"
 CONFIG_NAME="${CONFIG_NAME:-$DEFAULT_CONFIG_NAME}"
 LOG_PATH="${LOG_PATH:-$DEFAULT_LOG_PATH}"
+ARCHIVE_ROOT="${ARCHIVE_ROOT:-$DEFAULT_ARCHIVE_ROOT}"
 
 mkdir -p "$REPO_ROOT/logs"
 mkdir -p "$(dirname "$LOG_PATH")"
+mkdir -p "$ARCHIVE_ROOT"
 
 CONFIG_FILE="$CONFIG_DIR/${CONFIG_NAME}.yaml"
 if [[ ! -f "$CONFIG_FILE" ]]; then
@@ -69,6 +73,8 @@ export WANDB_MODE=offline
 export HYDRA_FULL_ERROR=1
 export NCCL_IB_DISABLE=1
 export NCCL_NET_GDR_LEVEL=0
+# 导出日志归档根目录环境变量，Python 代码可以通过 os.getenv 读取
+export MAS_ARCHIVE_ROOT="$ARCHIVE_ROOT"
 
 cd "$REPO_ROOT"
 
@@ -76,6 +82,7 @@ echo "[INFO] Repo root: $REPO_ROOT"
 echo "[INFO] Config: $CONFIG_NAME"
 echo "[INFO] CUDA_VISIBLE_DEVICES: $CUDA_VISIBLE_DEVICES"
 echo "[INFO] Log path: $LOG_PATH"
+echo "[INFO] Archive root: $ARCHIVE_ROOT"
 echo "[INFO] MAS work dir: $MAS_WORK_DIR"
 echo "[INFO] Prompt data: $PROMPT_DATA_PATH"
 echo "[INFO] Model paths: $MODEL_PATH_0 | $MODEL_PATH_1 | $MODEL_PATH_2"

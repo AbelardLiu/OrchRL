@@ -1,3 +1,4 @@
+from .archiver import LogArchiver
 from .backend import InferenceBackend, VLLMBackend
 from .collector import TrajectoryCollector
 from .datatypes import (
@@ -23,6 +24,7 @@ __all__ = [
     "FunctionRewardProvider",
     "InferenceBackend",
     "InteractionRecord",
+    "LogArchiver",
     "MASLauncher",
     "ModelMappingEntry",
     "ModelMonitor",

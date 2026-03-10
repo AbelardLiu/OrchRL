@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
@@ -119,6 +120,11 @@ class MateRolloutAdapter:
                 backend_url=backend_url,
             )
 
+        # Get archive_root from config or environment variable
+        archive_root = self._config.get("archive_root")
+        if archive_root is None:
+            archive_root = os.getenv("MAS_ARCHIVE_ROOT")
+
         return AgentPipeConfig(
             mas_command_template=self._config["mas_command_template"],
             config_template=self._load_config_template(),
@@ -127,6 +133,8 @@ class MateRolloutAdapter:
             monitor_host=self._config.get("monitor_host", "127.0.0.1"),
             monitor_port=int(self._config.get("monitor_port", 0)),
             mas_work_dir=Path(self._config["mas_work_dir"]) if self._config.get("mas_work_dir") else None,
+            archive_logs=self._config.get("archive_logs", True),
+            archive_root=archive_root,
         )
 
     def _build_backend(self, pipe_config: AgentPipeConfig) -> VLLMBackend:

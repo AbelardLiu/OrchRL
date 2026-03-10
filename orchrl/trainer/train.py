@@ -24,6 +24,29 @@ from orchrl.utils.ray_utils import init_ray_with_temp_dirs
 install_cleanup_hooks()
 
 
+def setup_logging():
+    """Configure logging for the training process."""
+    log_level = os.getenv('LOG_LEVEL', 'INFO').upper()
+    log_format = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+
+    # Configure root logger
+    logging.basicConfig(
+        level=getattr(logging, log_level, logging.INFO),
+        format=log_format,
+        force=True,
+    )
+
+    # Set specific loggers to DEBUG level for more detailed MAS troubleshooting
+    for logger_name in ['trajectory', 'AgentPipe', 'MASLauncher', 'parallel_rollout']:
+        logging.getLogger(logger_name).setLevel(logging.DEBUG)
+
+    logging.info(f"Logging configured at {log_level} level")
+
+
+# Initialize logging early
+setup_logging()
+
+
 @hydra.main(config_path="config", config_name="ppo_trainer", version_base=None)
 def main(config: DictConfig):   
     OmegaConf.to_yaml(config)
