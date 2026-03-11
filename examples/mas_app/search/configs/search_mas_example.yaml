@@ -16,7 +16,7 @@ llm:
   model: ${SEARCH_MAS_LLM_MODEL}
   temperature: 0.6
   top_p: 0.95
-  max_tokens: 1536
+  max_tokens: 4096  # Increased to match training config (max_response_length: 4096)
 
 search:
   provider: http
@@ -39,9 +39,9 @@ agents:
       # timeout: 120
       # max_retries: 3
       # retry_backoff_sec: 1.0
-    temperature: 0.2
+    temperature: 0.0  # Reduced from 0.2 for stricter format following
     top_p: 0.95
-    max_tokens: 2048  # Increased from 1024 for 0.6B model
+    max_tokens: 4096  # Increased to match training response_length
   searcher:
     # Optional per-agent backend override.
     llm:
@@ -51,9 +51,9 @@ agents:
       # timeout: 120
       # max_retries: 3
       # retry_backoff_sec: 1.0
-    temperature: 0.6
+    temperature: 0.3  # Reduced from 0.6 for better format adherence
     top_p: 0.95
-    max_tokens: 2048  # Increased from 1024 for 0.6B model
+    max_tokens: 4096  # Increased to match training response_length
   answerer:
     # Optional per-agent backend override.
     llm:
@@ -63,9 +63,9 @@ agents:
       # timeout: 120
       # max_retries: 3
       # retry_backoff_sec: 1.0
-    temperature: 0.4
+    temperature: 0.2  # Reduced from 0.4 for better format adherence
     top_p: 0.95
-    max_tokens: 2048  # Increased from 1536 for 0.6B model
+    max_tokens: 4096  # Increased to match training response_length
 
 data:
   input_path: ~/data/drmas_search_mas/test_sampled.parquet
