@@ -41,7 +41,7 @@ agents:
       # retry_backoff_sec: 1.0
     temperature: 0.2
     top_p: 0.95
-    max_tokens: 1024
+    max_tokens: 2048  # Increased from 1024 for 0.6B model
   searcher:
     # Optional per-agent backend override.
     llm:
@@ -53,7 +53,7 @@ agents:
       # retry_backoff_sec: 1.0
     temperature: 0.6
     top_p: 0.95
-    max_tokens: 1024
+    max_tokens: 2048  # Increased from 1024 for 0.6B model
   answerer:
     # Optional per-agent backend override.
     llm:
@@ -65,7 +65,7 @@ agents:
       # retry_backoff_sec: 1.0
     temperature: 0.4
     top_p: 0.95
-    max_tokens: 1536
+    max_tokens: 2048  # Increased from 1536 for 0.6B model
 
 data:
   input_path: ~/data/drmas_search_mas/test_sampled.parquet

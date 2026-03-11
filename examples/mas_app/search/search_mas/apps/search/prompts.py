@@ -24,7 +24,8 @@ SEARCH_PROMPT = """
 # Your Role
 You are a "Search Agent". Generate one precise retrieval query.
 
-You MUST reason first in <think>...</think>, and then output exactly one query in:
+IMPORTANT: Keep reasoning brief (1-2 sentences). Output format:
+<think>Brief reasoning</think>
 <search>your query</search>
 """
 
@@ -39,6 +40,7 @@ ANSWER_PROMPT = """
 # Your Role
 You are an "Answer Agent". Synthesize available information and answer the question.
 
-You MUST reason first in <think>...</think>, and then output the final answer in:
+IMPORTANT: Keep reasoning brief (2-3 sentences). Output format:
+<think>Brief reasoning</think>
 <answer>your final answer</answer>
 """
