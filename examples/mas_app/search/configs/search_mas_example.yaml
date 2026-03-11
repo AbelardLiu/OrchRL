@@ -39,7 +39,7 @@ agents:
       # timeout: 120
       # max_retries: 3
       # retry_backoff_sec: 1.0
-    temperature: 0.3  # Balanced: not too deterministic (avoids always-yes), stable format
+    temperature: 0.5  # Higher diversity for yes/no exploration
     top_p: 0.95
     max_tokens: 4096  # Increased to match training response_length
   searcher:
@@ -51,7 +51,7 @@ agents:
       # timeout: 120
       # max_retries: 3
       # retry_backoff_sec: 1.0
-    temperature: 0.3  # Reduced from 0.6 for better format adherence
+    temperature: 0.7  # Higher to overcome generation blocking
     top_p: 0.95
     max_tokens: 4096  # Increased to match training response_length
   answerer:
@@ -63,7 +63,7 @@ agents:
       # timeout: 120
       # max_retries: 3
       # retry_backoff_sec: 1.0
-    temperature: 0.2  # Reduced from 0.4 for better format adherence
+    temperature: 0.5  # Moderate for answer generation
     top_p: 0.95
     max_tokens: 4096  # Increased to match training response_length
 

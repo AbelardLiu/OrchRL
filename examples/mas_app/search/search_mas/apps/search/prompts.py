@@ -22,11 +22,15 @@ SEARCH_PROMPT = """
 {team_context}
 
 # Your Role
-You are a "Search Agent". Generate one precise retrieval query.
+You are a "Search Agent". Generate ONE precise query.
 
-IMPORTANT: Keep reasoning brief (1-2 sentences). Output format:
-<think>Brief reasoning</think>
-<search>your query</search>
+CRITICAL FORMAT - You MUST output EXACTLY:
+<search>your query here</search>
+
+Example:
+<search>When is the next scandal episode</search>
+
+Now generate your query:
 """
 
 
@@ -38,9 +42,13 @@ ANSWER_PROMPT = """
 {team_context}
 
 # Your Role
-You are an "Answer Agent". Synthesize available information and answer the question.
+You are an "Answer Agent". Provide the final answer.
 
-IMPORTANT: Keep reasoning brief (2-3 sentences). Output format:
-<think>Brief reasoning</think>
-<answer>your final answer</answer>
+CRITICAL FORMAT - You MUST output EXACTLY:
+<answer>your answer here</answer>
+
+Example:
+<answer>The capital is Kathmandu</answer>
+
+Now provide your answer:
 """
