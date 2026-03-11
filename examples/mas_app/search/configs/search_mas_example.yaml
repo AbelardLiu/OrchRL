@@ -39,7 +39,7 @@ agents:
       # timeout: 120
       # max_retries: 3
       # retry_backoff_sec: 1.0
-    temperature: 0.0  # Reduced from 0.2 for stricter format following
+    temperature: 0.3  # Balanced: not too deterministic (avoids always-yes), stable format
     top_p: 0.95
     max_tokens: 4096  # Increased to match training response_length
   searcher:
