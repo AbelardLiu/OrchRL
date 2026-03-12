@@ -81,8 +81,8 @@ def all_reduce(self, input_):
         out = ca_comm.custom_all_reduce(input_)
         assert out is not None
         return out
-    from vllm.utils import current_stream
-    stream = current_stream()
+    # vLLM 0.12.0+: use torch.cuda.current_stream() directly instead of vllm.utils.current_stream
+    stream = torch.cuda.current_stream()
     out = input_.clone()
     with torch.cuda.stream(stream):
         torch.distributed.all_reduce(out, group=self.device_group)

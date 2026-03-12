@@ -1,0 +1,73 @@
+defaults:
+- search_mas_nosearch_external
+- _self_
+
+training:
+  total_training_steps: 50
+  project_name: orchrl
+  experiment_name: search_mas_train_50step_conservative
+  logger:
+  - console
+  model_checkpoints_dir: checkpoints/search_mas_train_50step_conservative
+  train_batch_size: 4
+  train_sample_num: 8
+  validate_sample_num: 2
+  val_freq: 10
+  max_prompt_length: 2048
+  max_response_length: 2048
+
+models:
+  model_0:
+    ppo_trainer_config:
+      data:
+        max_prompt_length: 2048
+        max_response_length: 2048
+      actor_rollout_ref:
+        actor:
+          ppo_max_token_len_per_gpu: 4096
+          ppo_micro_batch_size_per_gpu: 1
+        ref:
+          log_prob_micro_batch_size_per_gpu: 1
+          log_prob_max_token_len_per_gpu: 4096
+        rollout:
+          temperature: 0.6
+          prompt_length: 2048
+          response_length: 2048
+          max_num_batched_tokens: 4096
+          max_num_seqs: 64
+  model_1:
+    ppo_trainer_config:
+      data:
+        max_prompt_length: 2048
+        max_response_length: 2048
+      actor_rollout_ref:
+        actor:
+          ppo_max_token_len_per_gpu: 4096
+          ppo_micro_batch_size_per_gpu: 1
+        ref:
+          log_prob_micro_batch_size_per_gpu: 1
+          log_prob_max_token_len_per_gpu: 4096
+        rollout:
+          temperature: 0.6
+          prompt_length: 2048
+          response_length: 2048
+          max_num_batched_tokens: 4096
+          max_num_seqs: 64
+  model_2:
+    ppo_trainer_config:
+      data:
+        max_prompt_length: 2048
+        max_response_length: 2048
+      actor_rollout_ref:
+        actor:
+          ppo_max_token_len_per_gpu: 4096
+          ppo_micro_batch_size_per_gpu: 1
+        ref:
+          log_prob_micro_batch_size_per_gpu: 1
+          log_prob_max_token_len_per_gpu: 4096
+        rollout:
+          temperature: 0.6
+          prompt_length: 2048
+          response_length: 2048
+          max_num_batched_tokens: 4096
+          max_num_seqs: 64

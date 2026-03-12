@@ -1089,7 +1089,7 @@ class ActorRolloutRefWorker(Worker):
             print(f"[rank-{self.rank}]: ===== CHECKPOINT SAVE DEBUG =====")
             print(f"[rank-{self.rank}]: _is_lora={self._is_lora}")
             print(f"[rank-{self.rank}]: isinstance(PeftModel)={isinstance(self.actor_module, PeftModel)}")
-            print(f"[rank-{self.rank}]: lora_num={self.lora_num}")
+            print(f"[rank-{self.rank}]: lora_num={getattr(self, 'lora_num', 1)}")
             print(f"[rank-{self.rank}]: agent_lora_mapping={agent_lora_mapping}")
 
         # For LoRA training, we do NOT save the base model checkpoint

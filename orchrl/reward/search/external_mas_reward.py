@@ -49,16 +49,54 @@ def _expected_candidates(metadata: dict[str, Any]) -> list[str]:
     return [candidate] if candidate else []
 
 
-def _is_correct(predicted: str, expected_candidates: list[str]) -> bool:
+def _compute_answer_score(predicted: str, expected_candidates: list[str]) -> float:
+    """
+    Compute reward score with partial credit:
+    - 1.0: Exact match
+    - 0.6: Candidate substring in prediction
+    - 0.4: Prediction substring in candidate (partial match)
+    - 0.0: No match
+    """
     normalized_predicted = _normalize_text(predicted)
     if not normalized_predicted or not expected_candidates:
-        return False
-    return any(
-        normalized_predicted == candidate
-        or normalized_predicted in candidate
-        or candidate in normalized_predicted
-        for candidate in expected_candidates
-    )
+        return 0.0
+
+    for candidate in expected_candidates:
+        # Exact match - full reward
+        if normalized_predicted == candidate:
+            return 1.0
+
+        # Candidate fully contained in prediction - high reward
+        if candidate in normalized_predicted:
+            # Calculate overlap ratio for better scoring
+            overlap_ratio = len(candidate) / len(normalized_predicted)
+            if overlap_ratio > 0.5:  # More than 50% of prediction is the answer
+                return 0.8
+            else:
+                return 0.6
+
+        # Prediction contained in candidate - partial reward
+        if normalized_predicted in candidate:
+            overlap_ratio = len(normalized_predicted) / len(candidate)
+            if overlap_ratio > 0.5:  # More than 50% of answer is covered
+                return 0.5
+            else:
+                return 0.3
+
+    # Check for partial word overlap as last resort
+    predicted_words = set(normalized_predicted.split())
+    for candidate in expected_candidates:
+        candidate_words = set(candidate.split())
+        if predicted_words and candidate_words:
+            overlap = predicted_words & candidate_words
+            if overlap:
+                overlap_ratio = len(overlap) / max(len(predicted_words), len(candidate_words))
+                if overlap_ratio > 0.5:
+                    return 0.4
+                elif overlap_ratio > 0.3:
+                    return 0.2
+
+    return 0.0
 
 
 def compute_reward(trajectory: Any) -> dict[str, Any]:
@@ -70,7 +108,7 @@ def compute_reward(trajectory: Any) -> dict[str, Any]:
 
     metadata = getattr(trajectory, "metadata", {}) or {}
     expected_candidates = _expected_candidates(metadata if isinstance(metadata, dict) else {})
-    final_reward = 1.0 if _is_correct(predicted, expected_candidates) else 0.0
+    final_reward = _compute_answer_score(predicted, expected_candidates)
 
     return {
         "agent_rewards": {
