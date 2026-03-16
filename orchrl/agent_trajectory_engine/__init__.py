@@ -12,7 +12,7 @@ from .datatypes import (
     TurnData,
 )
 from .launcher import MASLauncher
-from .monitor import ModelMonitor
+from .gateway import ModelMonitor
 from .parallel import parallel_rollout
 from .pipe import AgentPipe, AgentPipeConfig
 from .replay_cache import ReplayCache

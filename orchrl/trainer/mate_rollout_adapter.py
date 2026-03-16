@@ -8,7 +8,7 @@ from typing import Any
 from omegaconf import OmegaConf
 import yaml
 
-from trajectory import (
+from orchrl.agent_trajectory_engine import (
     AgentPipeConfig,
     ModelMappingEntry,
     TreeEpisodeResult,

@@ -12,7 +12,7 @@ from .backend import InferenceBackend
 from .collector import TrajectoryCollector
 from .datatypes import EpisodeResult, InteractionRecord, ModelMappingEntry
 from .launcher import MASLauncher
-from .monitor import ModelMonitor
+from .gateway import ModelMonitor
 from .replay_cache import ReplayCache
 from .reward import RewardProvider, RewardWorker
 
