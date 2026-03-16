@@ -22,7 +22,7 @@ search:
   provider: http
   # Retrieval service URL for search queries
   # Can be overridden by SEARCH_MAS_RETRIEVAL_SERVICE_URL environment variable
-  retrieval_service_url: http://127.0.0.1:8010/retrieve
+  retrieval_service_url: http://8.92.9.155:18010/retrieve
   topk: 3
   return_scores: true
   timeout: 30

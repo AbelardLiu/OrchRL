@@ -15,7 +15,7 @@ export SEARCH_MAS_LLM_API_KEY="${SEARCH_MAS_LLM_API_KEY:-${OPENAI_API_KEY:-}}"
 export SEARCH_MAS_LLM_MODEL="${SEARCH_MAS_LLM_MODEL:-${OPENAI_MODEL:-gpt-4.1-mini}}"
 
 # Search backend URL consumed by search.retrieval_service_url.
-export SEARCH_MAS_RETRIEVAL_SERVICE_URL="${SEARCH_MAS_RETRIEVAL_SERVICE_URL:-http://127.0.0.1:8010/retrieve}"
+export SEARCH_MAS_RETRIEVAL_SERVICE_URL="${SEARCH_MAS_RETRIEVAL_SERVICE_URL:-http://8.92.9.155:18010/retrieve}"
 
 # Keep OpenAI-compatible aliases in sync for external tools/scripts.
 export OPENAI_BASE_URL="${SEARCH_MAS_LLM_BASE_URL}"

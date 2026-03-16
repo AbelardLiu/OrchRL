@@ -309,7 +309,94 @@ class MultiAgentsPPOTrainer:
         colorful_print(f"All {len(self.ppo_trainer_dict)} trainers initialized successfully!", "green")
         
 
+    def _temp_debug_read_host_mem_mb(self):
+        mem_kb: dict[str, float] = {}
+        try:
+            with open("/proc/self/status", "r", encoding="utf-8") as status_fp:
+                for line in status_fp:
+                    if line.startswith(("VmRSS:", "VmHWM:", "VmSize:", "RssAnon:", "RssFile:")):
+                        key, raw_value = line.split(":", maxsplit=1)
+                        value_tokens = raw_value.strip().split()
+                        if value_tokens:
+                            mem_kb[key] = float(value_tokens[0])
+        except Exception:
+            mem_kb = {}
+
+        if "VmRSS" not in mem_kb:
+            try:
+                import resource
+
+                rss_kb = float(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
+                # On macOS ru_maxrss is bytes; on Linux it is KB.
+                if rss_kb > 1024 * 1024:
+                    rss_kb = rss_kb / 1024.0
+                mem_kb["VmRSS"] = rss_kb
+            except Exception:
+                mem_kb["VmRSS"] = -1.0
+
+        def _to_mb(value_kb):
+            if value_kb is None or value_kb < 0:
+                return -1.0
+            return float(value_kb) / 1024.0
+
+        return {
+            "rss_mb": _to_mb(mem_kb.get("VmRSS")),
+            "hwm_mb": _to_mb(mem_kb.get("VmHWM")),
+            "vms_mb": _to_mb(mem_kb.get("VmSize")),
+            "rss_anon_mb": _to_mb(mem_kb.get("RssAnon")),
+            "rss_file_mb": _to_mb(mem_kb.get("RssFile")),
+        }
+
+    def _temp_debug_log(self, stage: str, batch=None, extra=None, include_tensor_shapes: bool = False):
+        mem_snapshot = self._temp_debug_read_host_mem_mb()
+
+        def _fmt_metric(name: str):
+            value = mem_snapshot.get(name, -1.0)
+            return f"{name}={value:.2f}" if value >= 0 else f"{name}=NA"
+
+        message_parts = [
+            f"[[TEMP_DEBUG] LLL stage={stage}",
+            _fmt_metric("rss_mb"),
+            _fmt_metric("hwm_mb"),
+            _fmt_metric("vms_mb"),
+            _fmt_metric("rss_anon_mb"),
+            _fmt_metric("rss_file_mb"),
+        ]
+
+        if batch is not None:
+            try:
+                message_parts.append(f"samples={len(batch)}")
+            except Exception:
+                pass
+
+            tensor_mb = 0.0
+            if hasattr(batch, "batch") and isinstance(batch.batch, dict):
+                for tensor_value in batch.batch.values():
+                    if torch.is_tensor(tensor_value):
+                        tensor_mb += tensor_value.numel() * tensor_value.element_size() / (1024 ** 2)
+                message_parts.append(f"tensor_fields_mb={tensor_mb:.2f}")
+
+                if include_tensor_shapes:
+                    for tensor_key in ("prompts", "responses", "input_ids", "attention_mask", "position_ids", "response_mask"):
+                        tensor_value = batch.batch.get(tensor_key)
+                        if torch.is_tensor(tensor_value):
+                            message_parts.append(f"{tensor_key}_shape={tuple(tensor_value.shape)}")
+
+        if extra:
+            message_parts.append(f"extra={extra}")
+
+        print(" | ".join(message_parts))
+
     def _update_parameters(self, batch, ppo_trainer, timing_raw):
+        self._temp_debug_log(
+            stage="update_parameters.enter",
+            batch=batch,
+            extra=(
+                f"use_critic={ppo_trainer.use_critic}, "
+                f"use_kl_in_reward={ppo_trainer.config.algorithm.use_kl_in_reward}, "
+                f"lora_differ_mode={self.lora_differ_mode}"
+            ),
+        )
         # Initialize metrics dictionary if not exists
         if not hasattr(batch, 'meta_info'):
             batch.meta_info = {}
@@ -325,13 +412,25 @@ class MultiAgentsPPOTrainer:
 
                 if len(keep_indices) < len(agent_names):
                     colorful_print(f"Filtering training data: keeping {len(keep_indices)}/{len(agent_names)} samples (excluding agents: {self.agent_untrained})", "yellow")
+                    self._temp_debug_log(
+                        stage="update_parameters.before_filter_select_idxs",
+                        batch=batch,
+                        extra=f"keep={len(keep_indices)}/{len(agent_names)}",
+                    )
                     batch = batch.select_idxs(keep_indices)
+                    self._temp_debug_log(
+                        stage="update_parameters.after_filter_select_idxs",
+                        batch=batch,
+                        extra=f"keep={len(keep_indices)}/{len(agent_names)}",
+                    )
 
                     # If all samples are filtered out, return early
                     if len(keep_indices) == 0:
                         colorful_print("Warning: All samples filtered out, skipping parameter update", "red")
+                        self._temp_debug_log(stage="update_parameters.exit_all_filtered", batch=batch)
                         return batch
 
+        self._temp_debug_log(stage="update_parameters.before_padding", batch=batch)
         # prompts: left padding
         prompts_batch = torch.nn.utils.rnn.pad_sequence(
             [torch.flip(i, dims=[0]) for i in batch.batch["prompts"]],
@@ -384,8 +483,10 @@ class MultiAgentsPPOTrainer:
         batch.batch["response_mask"] = response_mask_batch
         # compute global_valid tokens
         batch.meta_info["global_token_num"] = torch.sum(batch.batch["attention_mask"], dim=-1).tolist()
+        self._temp_debug_log(stage="update_parameters.after_padding_and_masks", batch=batch, include_tensor_shapes=True)
 
         # Add reward tensor calculation
+        self._temp_debug_log(stage="update_parameters.before_reward_tensor", batch=batch)
         reward_tensor = torch.zeros_like(batch.batch["responses"], dtype=torch.float32)
         
         # Since responses_batch now uses right padding, valid tokens are on the left
@@ -411,6 +512,7 @@ class MultiAgentsPPOTrainer:
 
         batch.batch["token_level_scores"] = reward_tensor
         batch.batch["token_level_rewards"] = batch.batch["token_level_scores"]
+        self._temp_debug_log(stage="update_parameters.after_reward_tensor", batch=batch)
 
 
 
@@ -421,9 +523,14 @@ class MultiAgentsPPOTrainer:
             except Exception:
                 dp_world_size = 1
             if dp_world_size > 1:
+                self._temp_debug_log(stage="update_parameters.before_pad_dataproto_to_divisor_old_log_prob", batch=batch, extra=f"dp_world_size={dp_world_size}")
                 batch, _ = pad_dataproto_to_divisor(batch, dp_world_size)
+                self._temp_debug_log(stage="update_parameters.after_pad_dataproto_to_divisor_old_log_prob", batch=batch, extra=f"dp_world_size={dp_world_size}")
+            self._temp_debug_log(stage="update_parameters.before_compute_log_prob", batch=batch)
             old_log_prob = ppo_trainer.actor_rollout_wg.compute_log_prob(batch)
+            self._temp_debug_log(stage="update_parameters.after_compute_log_prob_before_union", batch=batch)
             batch = batch.union(old_log_prob)
+            self._temp_debug_log(stage="update_parameters.after_compute_log_prob_union", batch=batch)
 
 
         # Compute reference log_prob if needed for KL loss or KL in reward
@@ -431,17 +538,23 @@ class MultiAgentsPPOTrainer:
         if need_ref_log_prob:
             # compute reference log_prob
             with simple_timer("ref", timing_raw):
+                self._temp_debug_log(stage="update_parameters.before_compute_ref_log_prob", batch=batch, extra=f"ref_in_actor={ppo_trainer.ref_in_actor}")
                 if not ppo_trainer.ref_in_actor:
                     ref_log_prob = ppo_trainer.ref_policy_wg.compute_ref_log_prob(batch)
                 else:
                     ref_log_prob = ppo_trainer.actor_rollout_wg.compute_ref_log_prob(batch)
+                self._temp_debug_log(stage="update_parameters.after_compute_ref_log_prob_before_union", batch=batch)
                 batch = batch.union(ref_log_prob)
+                self._temp_debug_log(stage="update_parameters.after_compute_ref_log_prob_union", batch=batch)
 
             # compute values
         if ppo_trainer.use_critic:
             with simple_timer("values", timing_raw):
+                self._temp_debug_log(stage="update_parameters.before_compute_values", batch=batch)
                 values = ppo_trainer.critic_wg.compute_values(batch)
+                self._temp_debug_log(stage="update_parameters.after_compute_values_before_union", batch=batch)
                 batch = batch.union(values)
+                self._temp_debug_log(stage="update_parameters.after_compute_values_union", batch=batch)
 
         # Apply KL penalty to rewards if enabled
         if ppo_trainer.config.algorithm.use_kl_in_reward:
@@ -456,10 +569,12 @@ class MultiAgentsPPOTrainer:
                     kl_ctrl=ppo_trainer.kl_ctrl_in_reward,
                     kl_penalty=ppo_trainer.config.algorithm.kl_penalty
                 )
+                self._temp_debug_log(stage="update_parameters.after_apply_kl_penalty", batch=batch, extra=f"kl_metrics_keys={list(kl_metrics.keys())}")
                 batch.meta_info["metrics"].update(kl_metrics)
                 colorful_print(f"Applied KL penalty: {kl_metrics}", "cyan")
 
         with simple_timer("adv", timing_raw):
+            self._temp_debug_log(stage="update_parameters.before_compute_advantage", batch=batch)
 
             # compute advantages, executed on the driver process
 
@@ -476,17 +591,21 @@ class MultiAgentsPPOTrainer:
                 norm_adv_by_std_in_grpo=norm_adv_by_std_in_grpo,
                 config=ppo_trainer.config.algorithm,
             )
+            self._temp_debug_log(stage="update_parameters.after_compute_advantage", batch=batch)
 
         # update critic
         if ppo_trainer.use_critic:
             with simple_timer("update_critic", timing_raw):
+                self._temp_debug_log(stage="update_parameters.before_update_critic", batch=batch)
                 critic_output = ppo_trainer.critic_wg.update_critic(batch)
+                self._temp_debug_log(stage="update_parameters.after_update_critic", batch=batch)
             critic_output_metrics = reduce_metrics(critic_output.meta_info["metrics"])
             batch.meta_info["metrics"].update(critic_output_metrics)
 
       
         # update actor
         with simple_timer("update_actor", timing_raw):
+            self._temp_debug_log(stage="update_parameters.before_update_actor", batch=batch)
             batch.meta_info["multi_turn"] = ppo_trainer.config.actor_rollout_ref.rollout.multi_turn.enable
             
             if self.lora_differ_mode:
@@ -505,12 +624,27 @@ class MultiAgentsPPOTrainer:
                     agent_indices = np.where(agent_mask)[0].tolist()
                     # Construct sub-batch for each agent and align to dp world size if needed to avoid blocking in distributed updates
                     sub_batch = batch.select_idxs(agent_indices)
+                    self._temp_debug_log(
+                        stage="update_parameters.after_select_agent_sub_batch",
+                        batch=sub_batch,
+                        extra=f"agent={agent_name}, agent_samples={len(agent_indices)}",
+                    )
                     try:
                         dp_world_size = ppo_trainer.actor_rollout_wg.world_size
                     except Exception:
                         dp_world_size = 1
                     if dp_world_size > 1:
+                        self._temp_debug_log(
+                            stage="update_parameters.before_pad_agent_sub_batch",
+                            batch=sub_batch,
+                            extra=f"agent={agent_name}, dp_world_size={dp_world_size}",
+                        )
                         sub_batch, _ = pad_dataproto_to_divisor(sub_batch, dp_world_size)
+                        self._temp_debug_log(
+                            stage="update_parameters.after_pad_agent_sub_batch",
+                            batch=sub_batch,
+                            extra=f"agent={agent_name}, dp_world_size={dp_world_size}",
+                        )
                     agent_batch_dict[agent_name] = sub_batch
                     colorful_print(f"Agent {agent_name}: {len(agent_indices)} samples (training enabled)", "cyan")
                 
@@ -518,7 +652,9 @@ class MultiAgentsPPOTrainer:
                 all_actor_metrics_list = []
                 for agent_name, agent_batch in agent_batch_dict.items():
                     colorful_print(f"Updating LoRA for agent: {agent_name}", "green")
+                    self._temp_debug_log(stage="update_parameters.before_update_actor_lora_agent", batch=agent_batch, extra=f"agent={agent_name}")
                     agent_output = ppo_trainer.actor_rollout_wg.update_actor(agent_batch)
+                    self._temp_debug_log(stage="update_parameters.after_update_actor_lora_agent", batch=agent_batch, extra=f"agent={agent_name}")
                     all_actor_metrics_list.append(agent_output.meta_info["metrics"])
                 
                 # Merge metrics from multiple agents
@@ -539,15 +675,19 @@ class MultiAgentsPPOTrainer:
                 else:
                     actor_output_metrics = {}
             else:
+                self._temp_debug_log(stage="update_parameters.before_update_actor_single", batch=batch)
                 actor_output = ppo_trainer.actor_rollout_wg.update_actor(batch)
+                self._temp_debug_log(stage="update_parameters.after_update_actor_single", batch=batch)
                 actor_output_metrics = reduce_metrics(actor_output.meta_info["metrics"])
                 
             batch.meta_info["metrics"].update(actor_output_metrics)
+            self._temp_debug_log(stage="update_parameters.after_update_actor_metrics_merge", batch=batch)
 
         # Log rollout generations if enabled
         rollout_data_dir = ppo_trainer.config.trainer.get("rollout_data_dir", None)
         if rollout_data_dir:
             with simple_timer("dump_rollout_generations", timing_raw):
+                self._temp_debug_log(stage="update_parameters.before_dump_rollout_generations", batch=batch, extra=f"dump_path={rollout_data_dir}")
                 reward_extra_infos_dict: dict[str, list] = {}
                 inputs = ppo_trainer.tokenizer.batch_decode(batch.batch["prompts"], skip_special_tokens=True)
                 outputs = ppo_trainer.tokenizer.batch_decode(batch.batch["responses"], skip_special_tokens=True)
@@ -564,8 +704,10 @@ class MultiAgentsPPOTrainer:
                     reward_extra_infos_dict=reward_extra_infos_dict,
                     dump_path=rollout_data_dir,
                 )
+                self._temp_debug_log(stage="update_parameters.after_dump_rollout_generations", batch=batch, extra=f"dump_path={rollout_data_dir}")
 
             # Return the potentially updated batch so caller can keep latest fields
+            self._temp_debug_log(stage="update_parameters.exit", batch=batch)
             return batch
 
     
@@ -677,10 +819,19 @@ class MultiAgentsPPOTrainer:
                     all_trainer_metrics = {}
                     
                     def update_single_trainer(model_name, batch, trainer):
-                        
+                        self._temp_debug_log(
+                            stage=f"fit.update_single_trainer.enter.{model_name}",
+                            batch=batch,
+                            extra=f"global_step={self.global_steps}",
+                        )
                         local_timing_raw = {}
                         # Keep the updated batch with advantages/returns for later metrics
                         updated_batch = self._update_parameters(batch, trainer, local_timing_raw)
+                        self._temp_debug_log(
+                            stage=f"fit.update_single_trainer.exit.{model_name}",
+                            batch=updated_batch,
+                            extra=f"global_step={self.global_steps}, timing_keys={list(local_timing_raw.keys())}",
+                        )
                         
                         trainer_metrics = updated_batch.meta_info.get('metrics', {}) if hasattr(updated_batch, 'meta_info') else {}
                         agent_names = updated_batch.non_tensor_batch.get('agent_name') if hasattr(updated_batch, 'non_tensor_batch') else None
@@ -688,7 +839,10 @@ class MultiAgentsPPOTrainer:
                         return {"status": "success", "model_name": model_name, "timing": local_timing_raw, 
                                 "metrics": trainer_metrics, "agent_names": agent_names, "updated_batch": updated_batch}
                     
-                
+                    self._temp_debug_log(
+                        stage="fit.before_update_single_trainer_loop",
+                        extra=f"global_step={self.global_steps}, active_policies={list(gen_batch_output_per_policy.keys())}",
+                    )
                     # Update trainers
                     for model_name, trainer in self.ppo_trainer_dict.items():
                         if model_name in gen_batch_output_per_policy:
@@ -911,7 +1065,17 @@ class MultiAgentsPPOTrainer:
         return validation_metrics
     
     def _pad_dataproto_to_world_size(self, batch, world_sizes):
+        self._temp_debug_log(
+            stage="pad_dataproto_to_world_size.enter",
+            batch=batch,
+            extra=f"world_sizes={world_sizes}",
+        )
         batch, pad_size = pad_dataproto_to_divisor(batch, world_sizes)
+        self._temp_debug_log(
+            stage="pad_dataproto_to_world_size.exit",
+            batch=batch,
+            extra=f"world_sizes={world_sizes}, pad_size={pad_size}",
+        )
 
         # for the padded dataproto, make the traj mask to 0. is_last_step also False
         return batch
@@ -919,14 +1083,30 @@ class MultiAgentsPPOTrainer:
     def _finalize_batch_for_update(self, data_proto, ppo_trainer):
         filter_ratio = getattr(ppo_trainer.config, "filter_ratio", 0.0)
         filter_method = getattr(ppo_trainer.config, "filter_method", "uid")
+        self._temp_debug_log(
+            stage="finalize_batch_for_update.enter",
+            batch=data_proto,
+            extra=f"filter_ratio={filter_ratio}, filter_method={filter_method}",
+        )
         
-        return self._finalize_external_mas_batch(
+        finalized = self._finalize_external_mas_batch(
             data_proto,
             filter_ratio=filter_ratio,
             mode=filter_method,
         )
+        self._temp_debug_log(
+            stage="finalize_batch_for_update.exit",
+            batch=finalized,
+            extra=f"filter_ratio={filter_ratio}, filter_method={filter_method}",
+        )
+        return finalized
 
     def _finalize_external_mas_batch(self, data_proto, filter_ratio=0.0, mode="uid"):
+        self._temp_debug_log(
+            stage="finalize_external_mas_batch.enter",
+            batch=data_proto,
+            extra=f"filter_ratio={filter_ratio}, mode={mode}",
+        )
         required_keys = ("uid", "prompt_group_id", "agent_idx")
         missing_keys = [key for key in required_keys if key not in data_proto.non_tensor_batch]
         if missing_keys:
@@ -936,17 +1116,28 @@ class MultiAgentsPPOTrainer:
 
         uids = [str(uid) for uid in data_proto.non_tensor_batch["uid"]]
         rewards = data_proto.non_tensor_batch.get("reward", [])
-        return self._filter_batch_by_existing_uid_groups(
+        finalized = self._filter_batch_by_existing_uid_groups(
             data_proto,
             uids=uids,
             rewards=rewards,
             filter_ratio=filter_ratio,
             mode=mode,
         )
+        self._temp_debug_log(
+            stage="finalize_external_mas_batch.exit",
+            batch=finalized,
+            extra=f"filter_ratio={filter_ratio}, mode={mode}",
+        )
+        return finalized
 
     def _filter_batch_by_existing_uid_groups(self, data_proto, *, uids, rewards, filter_ratio=0.0, mode="uid"):
         from collections import defaultdict
 
+        self._temp_debug_log(
+            stage="filter_batch_by_existing_uid_groups.enter",
+            batch=data_proto,
+            extra=f"mode={mode}, filter_ratio={filter_ratio}, uid_count={len(uids)}, rewards_count={len(rewards)}",
+        )
         uid_reward_groups = defaultdict(list)
         all_rewards = []
 
@@ -1026,7 +1217,17 @@ class MultiAgentsPPOTrainer:
         if sample_to_remove:
             keep_indices = [i for i in range(len(data_proto)) if i not in sample_to_remove]
             if len(keep_indices) < len(data_proto):
+                self._temp_debug_log(
+                    stage="filter_batch_by_existing_uid_groups.before_select_idxs",
+                    batch=data_proto,
+                    extra=f"remove={len(sample_to_remove)}, keep={len(keep_indices)}",
+                )
                 data_proto = data_proto.select_idxs(keep_indices)
+                self._temp_debug_log(
+                    stage="filter_batch_by_existing_uid_groups.after_select_idxs",
+                    batch=data_proto,
+                    extra=f"remove={len(sample_to_remove)}, keep={len(keep_indices)}",
+                )
 
         if all_rewards:
             summary = {
@@ -1041,6 +1242,11 @@ class MultiAgentsPPOTrainer:
             )
             colorful_print(f"UID assignment summary: {summary}", "green")
 
+        self._temp_debug_log(
+            stage="filter_batch_by_existing_uid_groups.exit",
+            batch=data_proto,
+            extra=f"mode={mode}, removed={len(sample_to_remove)}, remain={len(data_proto)}",
+        )
         return data_proto
 
     def _cleanup_llm_servers(self, servers):

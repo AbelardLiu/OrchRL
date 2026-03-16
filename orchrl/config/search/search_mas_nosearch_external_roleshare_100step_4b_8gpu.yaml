@@ -69,8 +69,7 @@ agent_policy_configs:
 
 base_models:
   shared_policy:
-    # path: /data1/lll/models/Qwen3-4B-Instruct-2507
-    path: /data1/lll/models/Qwen3-0.6B
+    path: /data1/lll/models/Qwen3-4B-Instruct-2507
     name: shared_model
 
 training:
@@ -78,10 +77,10 @@ training:
   device: cuda
   total_training_steps: 100
   project_name: orchrl
-  experiment_name: search_mas_roleshare_100step_train
+  experiment_name: search_mas_roleshare_100step_4b_8gpu
   logger:
   - console
-  model_checkpoints_dir: checkpoints/search_mas_roleshare_100step_train
+  model_checkpoints_dir: checkpoints/search_mas_roleshare_100step_4b_8gpu
   ray_wait_register_center_timeout: 300
   train_batch_size: 8
   train_sample_num: 16
@@ -137,7 +136,7 @@ models:
           tensor_model_parallel_size: 8
           max_num_batched_tokens: 6144
           max_num_seqs: 128
-          gpu_memory_utilization: 0.25  # Lower utilization for co-located FSDP training and vLLM inference
+          gpu_memory_utilization: 0.3  # Slightly higher for 8-GPU setup with larger model
         trainer:
           n_gpus_per_node: 8
           n_training_gpus_per_node: 8

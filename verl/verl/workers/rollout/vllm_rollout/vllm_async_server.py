@@ -13,13 +13,14 @@
 # limitations under the License.
 import inspect
 import logging
+from copy import deepcopy
 from concurrent.futures import Future
 from collections.abc import AsyncGenerator
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import cloudpickle
 import ray
-from omegaconf import DictConfig
+from omegaconf import DictConfig, OmegaConf
 from starlette.requests import Request
 from starlette.responses import JSONResponse, StreamingResponse
 from vllm import SamplingParams
@@ -213,10 +214,20 @@ class AsyncvLLMServer(AsyncServerBase):
         trust_remote_code = config.model.get("trust_remote_code", False)
         config = config.rollout
 
-        tensor_parallel_size = config.get("tensor_model_parallel_size", 1)
+        tensor_parallel_size = int(config.get("tensor_model_parallel_size", 1))
         max_model_len = config.max_model_len if config.max_model_len else config.prompt_length + config.response_length
-        max_model_len = max(max_model_len, 32768)
-        max_num_batched_tokens = max(config.get("max_num_batched_tokens", 32768), max_model_len)
+        max_model_len = int(max_model_len)
+        max_num_batched_tokens = int(config.get("max_num_batched_tokens", max_model_len))
+        max_num_seqs = int(config.get("max_num_seqs", 256))
+        if config.enable_chunked_prefill and max_num_batched_tokens < max_model_len:
+            raise ValueError(
+                "Enable chunked prefill, max_num_batched_tokens is smaller than max_model_len, "
+                "please increase max_num_batched_tokens or disable chunked prefill"
+            )
+        engine_kwargs = {}
+        if "engine_kwargs" in config and "vllm" in config.engine_kwargs:
+            engine_kwargs = OmegaConf.to_container(deepcopy(config.engine_kwargs.vllm), resolve=True)
+            engine_kwargs = {key: val for key, val in engine_kwargs.items() if val is not None}
 
         # Override default generation config from hugging face model config,
         # user can still override them by passing kwargs in each request.
@@ -253,16 +264,17 @@ class AsyncvLLMServer(AsyncServerBase):
             #disable_mm_preprocessor_cache=True,
             skip_tokenizer_init=False,
             max_model_len=max_model_len,
-            load_format="auto",
+            load_format=config.load_format,
             disable_log_stats=config.disable_log_stats,
             max_num_batched_tokens=max_num_batched_tokens,
             enable_chunked_prefill=config.enable_chunked_prefill,
-            enable_prefix_caching=True,
+            enable_prefix_caching=config.get("enable_prefix_caching", True),
             trust_remote_code=trust_remote_code,
             seed=self.vllm_dp_rank,
-            max_num_seqs=256,
+            max_num_seqs=max_num_seqs,
             hf_overrides={"max_position_embeddings": max_model_len},
             **lora_kwargs,
+            **engine_kwargs,
         )
 
         # init async llm engine

@@ -26,7 +26,7 @@ agent_policy_configs:
       policy_name: shared_model
       train_llm_config:
         enable_thinking: false
-        temperature: 0.2
+        temperature: 0.15  # Reduced from 0.2 for 4B model
         top_p: 0.95
         top_k: 20
         min_p: 0.0
@@ -41,7 +41,7 @@ agent_policy_configs:
       policy_name: shared_model
       train_llm_config:
         enable_thinking: false
-        temperature: 0.6
+        temperature: 0.4  # Reduced from 0.6 for 4B model
         top_p: 0.95
         top_k: 20
         min_p: 0.0
@@ -56,7 +56,7 @@ agent_policy_configs:
       policy_name: shared_model
       train_llm_config:
         enable_thinking: false
-        temperature: 0.4
+        temperature: 0.3  # Reduced from 0.4 for 4B model
         top_p: 0.95
         top_k: 20
         min_p: 0.0
@@ -69,8 +69,7 @@ agent_policy_configs:
 
 base_models:
   shared_policy:
-    # path: /data1/lll/models/Qwen3-4B-Instruct-2507
-    path: /data1/lll/models/Qwen3-0.6B
+    path: /data1/lll/models/Qwen3-4B-Instruct-2507
     name: shared_model
 
 training:
@@ -78,18 +77,18 @@ training:
   device: cuda
   total_training_steps: 100
   project_name: orchrl
-  experiment_name: search_mas_roleshare_100step_train
+  experiment_name: search_mas_roleshare_100step_4b_8gpu_lowtemp
   logger:
   - console
-  model_checkpoints_dir: checkpoints/search_mas_roleshare_100step_train
+  model_checkpoints_dir: checkpoints/search_mas_roleshare_100step_4b_8gpu_lowtemp
   ray_wait_register_center_timeout: 300
-  train_batch_size: 8
-  train_sample_num: 16
+  train_batch_size: 4  # Reduced from 8 to reduce memory
+  train_sample_num: 8  # Reduced from 16 to reduce memory
   validate_sample_num: 4
-  sample_temperature: 0.6
+  sample_temperature: 0.4  # Reduced from 0.6 for 4B model
   val_freq: 20
-  max_prompt_length: 3072
-  max_response_length: 3072
+  max_prompt_length: 4096
+  max_response_length: 4096
   lora_rank: ${lora_rank}
   lora_alpha: ${lora_alpha}
   mate:
@@ -100,7 +99,7 @@ training:
       answerer: shared_model
     batch_size: ${training.train_batch_size}
     n_samples_per_prompt: ${training.train_sample_num}
-    max_concurrent_episodes: 4
+    max_concurrent_episodes: 2  # Reduced from 4 to reduce memory
     timeout: 120
     backend_timeout: 120
     credit_assignment: all_turns
@@ -130,14 +129,40 @@ models:
       actor_rollout_ref:
         model:
           path: ${base_models.shared_policy.path}
+          enable_gradient_checkpointing: true
+          enable_activation_offload: true
+          use_remove_padding: true
         rollout:
           temperature: ${training.sample_temperature}
           prompt_length: ${training.max_prompt_length}
           response_length: ${training.max_response_length}
           tensor_model_parallel_size: 8
-          max_num_batched_tokens: 6144
-          max_num_seqs: 128
-          gpu_memory_utilization: 0.25  # Lower utilization for co-located FSDP training and vLLM inference
+          max_num_batched_tokens: 4096  # Reduced from 6144 to reduce memory
+          max_num_seqs: 16  # Reduced from 128 to reduce memory
+          gpu_memory_utilization: 0.4  # Reduced from 0.3 to reduce memory
+          n: 1  # Number of rollouts per prompt (default, must be >= 1)
+        actor:
+          ppo_mini_batch_size: 8  # Normalized: 8*1/8=1
+          ppo_micro_batch_size: 8  # Must be >= 8 GPUs (8//8=1 per GPU)
+          ppo_micro_batch_size_per_gpu: null  # Auto-calculated
+          use_dynamic_bsz: true
+          ppo_max_token_len_per_gpu: 4096  # Must be >= max_prompt + max_response (3072+3072=6144)
+          use_torch_compile: false
+          fsdp_config:
+            param_offload: true  # Enable to reduce memory
+            optimizer_offload: false
+            offload_policy: true
+        ref:
+          log_prob_micro_batch_size: 8  # Must be >= 8 GPUs (8//8=1 per GPU)
+          log_prob_micro_batch_size_per_gpu: null  # Auto-calculated
+          log_prob_use_dynamic_bsz: true
+          log_prob_max_token_len_per_gpu: 4096  # Must be >= max_prompt + max_response (3072+3072=6144)
+          enable_activation_offload: true
+          use_torch_compile: false
+          fsdp_config:
+            param_offload: true  # Enable to reduce memory
+            reshard_after_forward: true
+            offload_policy: true
         trainer:
           n_gpus_per_node: 8
           n_training_gpus_per_node: 8
