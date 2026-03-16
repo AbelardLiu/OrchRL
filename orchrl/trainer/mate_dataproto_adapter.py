@@ -5,7 +5,7 @@ from typing import Any
 
 import torch
 
-from trajectory import TreeEpisodeResult
+from orchrl.agent_trajectory_engine import TreeEpisodeResult
 from verl import DataProto
 
 

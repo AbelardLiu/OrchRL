@@ -3,7 +3,7 @@ from __future__ import annotations
 from importlib import import_module
 from typing import Any, Callable
 
-from trajectory import FunctionRewardProvider
+from orchrl.agent_trajectory_engine import FunctionRewardProvider
 
 
 def _import_callable(import_path: str) -> Callable[..., Any]:
